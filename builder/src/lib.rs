@@ -91,7 +91,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
                 //parse attribute
                 for attr in &f.attrs {
                     if attr.path().is_ident("builder") {
-                        attr.parse_nested_meta(|meta| {
+                        if let Err(e)  = attr.parse_nested_meta(|meta| {
                             if meta.path.is_ident("each") {
                                 let each_type = parse_vec_type(&f.ty).unwrap();
                                 let value = meta.value()?;
@@ -111,10 +111,11 @@ pub fn derive(input: TokenStream) -> TokenStream {
                                 });
                                 Ok(())
                             } else {
-                                Err(meta.error("unsupported attribute"))
+                                Err(syn::Error::new_spanned(&attr.meta,r#"expected `builder(each = "...")`"#))
                             }
-                        })
-                        .unwrap();
+                        }){
+                            return e.into_compile_error().into();
+                        }
                     }
                 }
 
