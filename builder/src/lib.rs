@@ -2,10 +2,10 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{
     parse_macro_input, punctuated, AngleBracketedGenericArguments, Data, DeriveInput, Field,
-    Fields, GenericArgument, Path, PathArguments, Token, Type, TypePath,
+    Fields, GenericArgument, LitStr, Path, PathArguments, Token, Type, TypePath,
 };
 
-#[proc_macro_derive(Builder)]
+#[proc_macro_derive(Builder, attributes(builder))]
 pub fn derive(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let name = &input.ident;
@@ -13,6 +13,8 @@ pub fn derive(input: TokenStream) -> TokenStream {
     let mut fields_must_ty = Vec::new();
     let mut fields_opt = Vec::new();
     let mut fields_opt_ty = Vec::new();
+    let mut fields_setter = Vec::new();
+    let mut fields_init = Vec::new();
 
     let builder_name = syn::Ident::new(&format!("{}Builder", name), name.span());
     let fields: &punctuated::Punctuated<Field, Token![,]> = match input.data {
@@ -63,13 +65,72 @@ pub fn derive(input: TokenStream) -> TokenStream {
                 {
                     let arg = args.first().unwrap();
                     if let GenericArgument::Type(f_opt_ty) = &arg {
+                        //fields opt
                         fields_opt_ty.push(quote! {#f_opt_ty});
+
+                        fields_init.push(quote! {
+                            #f_name : None
+                        });
+
+                        //fields setter
+                        fields_setter.push(quote! {
+                            fn #f_name(&mut self, #f_name : #f_opt_ty)->&mut Self{
+                                self.#f_name = Some(Some(#f_name));
+                                self
+                            }
+                        });
                     }
                 }
             } else {
                 fields_must.push(quote! {#f_name});
                 let f_must_ty = &f.ty;
                 fields_must_ty.push(quote! {#f_must_ty});
+
+                let mut is_each = false;
+
+                //parse attribute
+                for attr in &f.attrs {
+                    if attr.path().is_ident("builder") {
+                        attr.parse_nested_meta(|meta| {
+                            if meta.path.is_ident("each") {
+                                let each_type = parse_vec_type(&f.ty).unwrap();
+                                let value = meta.value()?;
+                                let s: LitStr = value.parse()?;
+                                let setter_each_name = syn::Ident::new(&s.value(), s.span());
+
+                                is_each = true;
+                                fields_setter.push(quote! {
+                                    fn #setter_each_name(&mut self, #setter_each_name:#each_type)->&mut Self{
+                                        self.#f_name.get_or_insert_with(Vec::new).push(#setter_each_name);
+                                        self
+                                    }
+                                });
+
+                                fields_init.push(quote!{
+                                    #f_name : Some(Vec::<#each_type>::new())
+                                });
+                                Ok(())
+                            } else {
+                                Err(meta.error("unsupported attribute"))
+                            }
+                        })
+                        .unwrap();
+                    }
+                }
+
+                //fields setter
+                if !is_each {
+                    fields_setter.push(quote! {
+                        fn #f_name(&mut self, #f_name : #f_must_ty)->&mut Self{
+                            self.#f_name = Some(#f_name);
+                            self
+                        }
+                    });
+
+                    fields_init.push(quote! {
+                        #f_name : None
+                    });
+                }
             }
         }
     }
@@ -86,21 +147,13 @@ pub fn derive(input: TokenStream) -> TokenStream {
         impl #name{
             pub fn builder()->#builder_name{
                 #builder_name{
-                    #(#fields_name: None,)*
+                    #(#fields_init,)*
                 }
             }
         }
 
         impl #builder_name{
-            #(fn #fields_must(&mut self, #fields_must: #fields_must_ty)->&mut Self{
-                self.#fields_must = Some(#fields_must);
-                self
-            })*
-
-            #(fn #fields_opt(&mut self, #fields_opt: #fields_opt_ty)->&mut Self{
-                self.#fields_opt = Some(Some(#fields_opt));
-                self
-            })*
+            #(#fields_setter)*
 
             pub fn build(&mut self) -> Result<#name, Box<dyn Error>>{
                 #(
@@ -118,4 +171,31 @@ pub fn derive(input: TokenStream) -> TokenStream {
         }
     }
     .into()
+}
+
+fn parse_vec_type(vec_type: &syn::Type) -> Option<&Type> {
+    let Type::Path(TypePath {
+        path: Path { segments, .. },
+        ..
+    }) = vec_type
+    else {
+        return None;
+    };
+
+    let segment = segments.last()?;
+    if segment.ident != "Vec" {
+        return None;
+    }
+
+    //get inner option type
+    let PathArguments::AngleBracketed(AngleBracketedGenericArguments { args, .. }) =
+        &segment.arguments
+    else {
+        return None;
+    };
+
+    match args.first()? {
+        GenericArgument::Type(f_opt_ty) => Some(f_opt_ty),
+        _ => None,
+    }
 }
