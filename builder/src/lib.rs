@@ -37,6 +37,10 @@ pub fn derive(input: TokenStream) -> TokenStream {
         .collect();
 
     quote! {
+        use std::boxed::Box;
+        use std::error::Error;
+        use std::result::Result;
+
         pub struct #builder_name{
             #(#fields_name:Option<#fields_ty>,)*
         }
@@ -54,6 +58,19 @@ pub fn derive(input: TokenStream) -> TokenStream {
                 self.#fields_name = Some(#fields_name);
                 self
             })*
+
+            pub fn build(&mut self) -> Result<#name, Box<dyn Error>>{
+                #(
+                    if self.#fields_name.is_none(){
+                        return Err(Box::<dyn Error>::from(format!("{} is None", stringify!(#fields_name))))
+                    }
+                )*
+
+                Ok(#name{
+                   #(#fields_name : self.#fields_name.take().unwrap(),)*
+                })
+
+            }
         }
     }
     .into()
