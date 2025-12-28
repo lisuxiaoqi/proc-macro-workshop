@@ -69,13 +69,13 @@ pub fn derive(input: TokenStream) -> TokenStream {
                         fields_opt_ty.push(quote! {#f_opt_ty});
 
                         fields_init.push(quote! {
-                            #f_name : None
+                            #f_name : std::option::Option::None
                         });
 
                         //fields setter
                         fields_setter.push(quote! {
                             fn #f_name(&mut self, #f_name : #f_opt_ty)->&mut Self{
-                                self.#f_name = Some(Some(#f_name));
+                                self.#f_name = std::option::Option::Some(std::option::Option::Some(#f_name));
                                 self
                             }
                         });
@@ -107,7 +107,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
                                 });
 
                                 fields_init.push(quote!{
-                                    #f_name : Some(Vec::<#each_type>::new())
+                                    #f_name : std::option::Option::Some(Vec::<#each_type>::new())
                                 });
                                 Ok(())
                             } else {
@@ -123,13 +123,13 @@ pub fn derive(input: TokenStream) -> TokenStream {
                 if !is_each {
                     fields_setter.push(quote! {
                         fn #f_name(&mut self, #f_name : #f_must_ty)->&mut Self{
-                            self.#f_name = Some(#f_name);
+                            self.#f_name = std::option::Option::Some(#f_name);
                             self
                         }
                     });
 
                     fields_init.push(quote! {
-                        #f_name : None
+                        #f_name : std::option::Option::None
                     });
                 }
             }
@@ -137,12 +137,10 @@ pub fn derive(input: TokenStream) -> TokenStream {
     }
 
     quote! {
-        use std::boxed::Box;
         use std::error::Error;
-        use std::result::Result;
 
         pub struct #builder_name{
-            #(#fields_name:Option<#fields_ty>,)*
+            #(#fields_name:std::option::Option<#fields_ty>,)*
         }
 
         impl #name{
@@ -156,16 +154,16 @@ pub fn derive(input: TokenStream) -> TokenStream {
         impl #builder_name{
             #(#fields_setter)*
 
-            pub fn build(&mut self) -> Result<#name, Box<dyn Error>>{
+            pub fn build(&mut self) -> std::result::Result<#name, std::boxed::Box<dyn Error>>{
                 #(
                     if self.#fields_must.is_none(){
-                        return Err(Box::<dyn Error>::from(format!("{} is None", stringify!(#fields_name))))
+                        return Err(std::boxed::Box::<dyn Error>::from(format!("{} is None", stringify!(#fields_name))))
                     }
                 )*
 
                 Ok(#name{
                    #(#fields_must : self.#fields_must.take().unwrap(),)*
-                   #(#fields_opt : self.#fields_opt.take().unwrap_or_else(||None),)*
+                   #(#fields_opt : self.#fields_opt.take().unwrap_or_else(||std::option::Option::None),)*
                 })
 
             }
@@ -174,29 +172,29 @@ pub fn derive(input: TokenStream) -> TokenStream {
     .into()
 }
 
-fn parse_vec_type(vec_type: &syn::Type) -> Option<&Type> {
+fn parse_vec_type(vec_type: &syn::Type) -> std::option::Option<&Type> {
     let Type::Path(TypePath {
         path: Path { segments, .. },
         ..
     }) = vec_type
     else {
-        return None;
+        return std::option::Option::None;
     };
 
     let segment = segments.last()?;
     if segment.ident != "Vec" {
-        return None;
+        return std::option::Option::None;
     }
 
     //get inner option type
     let PathArguments::AngleBracketed(AngleBracketedGenericArguments { args, .. }) =
         &segment.arguments
     else {
-        return None;
+        return std::option::Option::None;
     };
 
     match args.first()? {
-        GenericArgument::Type(f_opt_ty) => Some(f_opt_ty),
-        _ => None,
+        GenericArgument::Type(f_opt_ty) => std::option::Option::Some(f_opt_ty),
+        _ => std::option::Option::None,
     }
 }
