@@ -1,7 +1,6 @@
 [package]
 name = "derive_builder"
 version = "0.0.0"
-autotests = false
 edition = "2021"
 publish = false
 
@@ -16,4 +15,6 @@ path = "tests/progress.rs"
 trybuild = { version = "1.0.108", features = ["diff"] }
 
 [dependencies]
+quote = "1.0.42"
+syn = "2.0.111"
 # TODO
