@@ -21,8 +21,8 @@
 use derive_debug::CustomDebug;
 
 #[derive(CustomDebug)]
-pub struct Field<T> {
-    value: T,
+pub struct Field<U> {
+    value: U,
     #[debug = "0b{:08b}"]
     bitmask: u8,
 }
