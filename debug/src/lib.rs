@@ -1,8 +1,8 @@
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{
-    parse_macro_input, spanned::Spanned, Data, DeriveInput, Expr, ExprLit, Field, Fields,
-    GenericParam, Generics, Lit, Meta, Type,
+    parse_macro_input, punctuated::Punctuated, Data, DeriveInput, Expr, ExprLit, Field, Fields,
+    GenericArgument, GenericParam, Lit, Meta, PathArguments, Token, Type, TypeParam,
 };
 
 #[proc_macro_derive(CustomDebug, attributes(debug))]
@@ -49,10 +49,12 @@ pub fn derive(input: TokenStream) -> TokenStream {
         .collect();
 
     //trait bounds
-    for field in fields {
-        let (ty_ident, ok) = is_generic_type(field, gs);
-        if ok {
-            trait_bounds.push(quote! {#ty_ident : std::fmt::Debug});
+    for gp in &gs.params {
+        if let GenericParam::Type(tp) = gp {
+            let ty_ident = &tp.ident;
+            if !is_in_phantom(tp, fields) {
+                trait_bounds.push(quote! {#ty_ident : std::fmt::Debug});
+            }
         }
     }
 
@@ -89,20 +91,30 @@ fn parse_arg(f: &Field) -> String {
     args.into()
 }
 
-fn is_generic_type(f: &Field, gs: &Generics) -> (syn::Ident, bool) {
-    let mut ty_ident = syn::Ident::new("tmp", f.span());
-    let mut is_generic = false;
-    if let Type::Path(tp) = &f.ty {
-        ty_ident = tp.path.segments.last().unwrap().ident.clone();
-        //eprintln!("tp.path.segments.last:{}", tp.to_token_stream());
-        for p in &gs.params {
-            if let GenericParam::Type(tp) = p {
-                //eprintln!("type param:{}", tp.to_token_stream());
-                if tp.ident == ty_ident {
-                    is_generic = true;
+fn is_in_phantom(tp: &TypeParam, fields: &Punctuated<Field, Token![,]>) -> bool {
+    let g_ident = &tp.ident;
+    for f in fields {
+        if let Type::Path(tp) = &f.ty {
+            if let Some(seg) = tp.path.segments.last() {
+                if g_ident == &seg.ident {
+                    return false;
+                }
+
+                if let PathArguments::AngleBracketed(inner_arg) = &seg.arguments {
+                    if seg.ident.to_string() == "PhantomData" {
+                        continue;
+                    }
+
+                    for arg in &inner_arg.args {
+                        if let GenericArgument::Type(Type::Path(inner_tp)) = arg {
+                            if inner_tp.path.is_ident(g_ident) {
+                                return false;
+                            }
+                        }
+                    }
                 }
             }
         }
     }
-    (ty_ident, is_generic)
+    true
 }
