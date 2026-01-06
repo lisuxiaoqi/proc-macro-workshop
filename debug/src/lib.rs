@@ -2,7 +2,8 @@ use proc_macro::TokenStream;
 use quote::{quote, ToTokens};
 use syn::{
     parse_macro_input, punctuated::Punctuated, Data, DeriveInput, Expr, ExprLit, Field, Fields,
-    GenericArgument, GenericParam, Lit, Meta, PathArguments, Token, Type, TypeParam, TypePath,
+    GenericArgument, GenericParam, Lit, LitStr, Meta, PathArguments, Token, Type, TypeParam,
+    TypePath,
 };
 
 #[proc_macro_derive(CustomDebug, attributes(debug))]
@@ -13,10 +14,31 @@ pub fn derive(input: TokenStream) -> TokenStream {
     let name = &input.ident;
     eprintln!("--Start parse input:{}", name);
 
+    let mut trait_bounds = Vec::new();
+
+    //parse bound attribute
+    let mut in_attr = false;
+    for attr in &input.attrs {
+        if attr.path().is_ident("debug") {
+            attr.parse_nested_meta(|meta| {
+                if meta.path.is_ident("bound") {
+                    let v = meta.value()?;
+                    let vs: LitStr = v.parse()?;
+                    let tokens: proc_macro2::TokenStream =
+                        syn::parse_str(&vs.value()).expect("invalid where predicate");
+                    trait_bounds.push(quote! {#tokens});
+                    in_attr = true;
+                }
+
+                Ok(())
+            })
+            .unwrap();
+        }
+    }
+
     //generics
     let gs = &input.generics;
     let (g_impl, g_ty, _g_where) = gs.split_for_impl();
-    let mut trait_bounds = Vec::new();
 
     //fields
     let fields = match &input.data {
@@ -50,12 +72,19 @@ pub fn derive(input: TokenStream) -> TokenStream {
         .collect();
 
     //trait bounds
-    for gp in &gs.params {
-        if let GenericParam::Type(tp) = gp {
-            eprintln!("GenericParam:{}", tp.to_token_stream());
-            let ty_ident = &tp.ident;
-            if !is_in_phantom(tp, fields) {
-                trait_bounds.push(quote! {#ty_ident : std::fmt::Debug});
+    if !in_attr {
+        for gp in &gs.params {
+            if let GenericParam::Type(tp) = gp {
+                eprintln!("GenericParam:{}", tp.to_token_stream());
+                let ty_ident = &tp.ident;
+
+                // try to push associated types into debug trait
+                try_push_atypes(&mut trait_bounds, tp, fields);
+
+                //filter out param in PhantomData
+                if !is_in_phantom(tp, fields) {
+                    trait_bounds.push(quote! {#ty_ident : std::fmt::Debug});
+                }
             }
         }
     }
@@ -144,4 +173,49 @@ fn is_phantom(tp: &TypeParam, ty: &Type) -> bool {
         }
     }
     true
+}
+
+fn try_push_atypes(
+    bounds: &mut Vec<proc_macro2::TokenStream>,
+    tp: &TypeParam,
+    fields: &Punctuated<Field, Token![,]>,
+) {
+    for field in fields {
+        if let Type::Path(TypePath { path, .. }) = &field.ty {
+            if let Some(seg) = path.segments.first() {
+                eprintln!("atypes, first seg:{}", seg.to_token_stream());
+                if seg.ident == tp.ident && path.segments.len() > 1 {
+                    eprintln!("try push atypes matched:{}", path.to_token_stream());
+                    return;
+                }
+            }
+
+            if let Some(seg) = path.segments.last() {
+                eprintln!("atypes, last seg:{}", seg.to_token_stream());
+                if let PathArguments::AngleBracketed(args) = &seg.arguments {
+                    for arg in &args.args {
+                        if let GenericArgument::Type(Type::Path(TypePath {
+                            path: arg_path, ..
+                        })) = arg
+                        {
+                            eprintln!("atypes arg inner path:{}", arg_path.to_token_stream());
+                            if arg_path.segments.first().unwrap().ident == tp.ident
+                                && arg_path.segments.len() > 1
+                            {
+                                eprintln!(
+                                    "try push atypes matched within:{}:{}",
+                                    path.to_token_stream(),
+                                    arg_path.to_token_stream()
+                                );
+                                bounds.push(quote! {
+                                    #arg_path: Debug
+                                });
+                                return;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
