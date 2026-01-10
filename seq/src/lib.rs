@@ -7,7 +7,7 @@ pub fn seq(input: TokenStream) -> TokenStream {
     let raw = proc_macro2::TokenStream::from(input);
 
     //parse N, start, end
-    let mut raw_iter = raw.into_iter();
+    let mut raw_iter = raw.into_iter().peekable();
     let var_ident = if let Some(TokenTree::Ident(n)) = raw_iter.next() {
         n
     } else {
@@ -54,13 +54,26 @@ pub fn seq(input: TokenStream) -> TokenStream {
         }
     }
 
-    let end = if let Some(TokenTree::Literal(lit)) = raw_iter.next() {
+    //try to match = range
+    let mut inclusive = false;
+    if let Some(TokenTree::Punct(p)) = raw_iter.peek() {
+        if p.as_char() == '=' {
+            inclusive = true;
+            raw_iter.next();
+        }
+    }
+
+    let mut end = if let Some(TokenTree::Literal(lit)) = raw_iter.next() {
         lit.to_string().parse::<usize>().unwrap()
     } else {
         return syn::Error::new(Span::call_site(), "Keyword in expected")
             .to_compile_error()
             .into();
     };
+
+    if inclusive {
+        end += 1;
+    }
     eprintln!("parsed end index:{}", end);
 
     //get body Token
