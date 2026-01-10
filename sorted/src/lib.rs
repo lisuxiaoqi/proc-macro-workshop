@@ -5,5 +5,5 @@ pub fn sorted(args: TokenStream, input: TokenStream) -> TokenStream {
     let _ = args;
     let _ = input;
 
-    unimplemented!()
+    input
 }
