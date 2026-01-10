@@ -5,6 +5,7 @@ use quote::quote;
 #[proc_macro]
 pub fn seq(input: TokenStream) -> TokenStream {
     let raw = proc_macro2::TokenStream::from(input);
+    eprintln!("seq input, raw:{0}\n, debug:{0:?}", raw);
 
     //parse N, start, end
     let mut raw_iter = raw.into_iter().peekable();
@@ -63,12 +64,23 @@ pub fn seq(input: TokenStream) -> TokenStream {
         }
     }
 
-    let mut end = if let Some(TokenTree::Literal(lit)) = raw_iter.next() {
-        lit.to_string().parse::<usize>().unwrap()
-    } else {
-        return syn::Error::new(Span::call_site(), "Keyword in expected")
-            .to_compile_error()
-            .into();
+    let mut end = match raw_iter.next() {
+        Some(TokenTree::Literal(lit)) => lit.to_string().parse::<usize>().unwrap(),
+        Some(TokenTree::Group(g)) => {
+            let stream = g.stream();
+            if let Some(TokenTree::Literal(macro_lit)) = &stream.into_iter().next() {
+                macro_lit.to_string().parse::<usize>().unwrap()
+            } else {
+                return syn::Error::new(Span::call_site(), "invalid range value")
+                    .to_compile_error()
+                    .into();
+            }
+        }
+        _ => {
+            return syn::Error::new(Span::call_site(), "invalid range value")
+                .to_compile_error()
+                .into();
+        }
     };
 
     if inclusive {
