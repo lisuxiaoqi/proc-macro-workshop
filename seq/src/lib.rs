@@ -1,14 +1,10 @@
 use proc_macro::TokenStream;
 use proc_macro2::{Span, TokenTree};
-use quote::{quote, quote_spanned};
-use syn::spanned::Spanned;
+use quote::quote;
 
 #[proc_macro]
 pub fn seq(input: TokenStream) -> TokenStream {
     let raw = proc_macro2::TokenStream::from(input);
-    //for tt in raw {
-    //    eprintln!("tt:{}", tt.to_string());
-    //}
 
     //parse N, start, end
     let mut raw_iter = raw.into_iter();
@@ -74,11 +70,11 @@ pub fn seq(input: TokenStream) -> TokenStream {
             .into();
     };
 
-    let mut body_tokens = g.stream();
+    let body_tokens = g.stream();
     eprintln!("parsed body:{:?}", body_tokens);
 
     //locate inner repeat range
-    let output = process_group(&mut body_tokens, &var_ident, start, end);
+    let output = process_group(&body_tokens, &var_ident, start, end);
     eprintln!("expanded output:{}", output);
 
     // do code replace
@@ -86,7 +82,7 @@ pub fn seq(input: TokenStream) -> TokenStream {
 }
 
 fn process_group(
-    body: &mut proc_macro2::TokenStream,
+    body: &proc_macro2::TokenStream,
     var_ident: &proc_macro2::Ident,
     start: usize,
     end: usize,
@@ -97,28 +93,30 @@ fn process_group(
 
     if !sub_range {
         for n in start..end {
-            let rep = replace_stream(body, var_ident, n);
-            output.extend(quote! {#rep});
+            let ident_out = replace_ident_stream(body, var_ident, n);
+            let out = replace_lit_stream(&ident_out, var_ident, n);
+            output.extend(quote! {#out});
         }
     }
 
     output
 }
 
-fn replace_stream(
+fn replace_lit_stream(
     body: &proc_macro2::TokenStream,
     var_ident: &proc_macro2::Ident,
     val: usize,
 ) -> proc_macro2::TokenStream {
     let mut output = proc_macro2::TokenStream::new();
-    eprintln!("\treplace_stream, body:{}", body);
+    eprintln!("replace_lit_stream, body:{}", body);
 
     for it in body.clone() {
         match it {
             TokenTree::Ident(ident) => {
                 eprintln!("\t\t replace_stream, get ident:{}", ident);
+                //replace literal
                 if &ident == var_ident {
-                    eprintln!("\t\t ident match");
+                    eprintln!("\t\t ident value match");
                     let mut val_id = proc_macro2::Literal::usize_unsuffixed(val);
                     val_id.set_span(ident.span());
                     output.extend(quote! {#val_id});
@@ -129,7 +127,7 @@ fn replace_stream(
                 }
             }
             TokenTree::Group(g) => {
-                let inner = replace_stream(&g.stream(), var_ident, val);
+                let inner = replace_lit_stream(&g.stream(), var_ident, val);
                 let mut rg = proc_macro2::Group::new(g.delimiter(), inner);
                 rg.set_span(g.span());
                 output.extend(quote! {#rg});
@@ -140,6 +138,57 @@ fn replace_stream(
         }
     }
 
-    eprintln!("\treplace_stream, output:{}", output);
+    eprintln!("replace_lit_stream, output:{}", output);
+    output
+}
+
+fn replace_ident_stream(
+    body: &proc_macro2::TokenStream,
+    var_ident: &proc_macro2::Ident,
+    val: usize,
+) -> proc_macro2::TokenStream {
+    let mut output = proc_macro2::TokenStream::new();
+    eprintln!("replace_ident_stream, body:{}", body);
+    let tt_vec: Vec<_> = body.clone().into_iter().collect();
+
+    let mut i = 0;
+    while i < tt_vec.len() {
+        if i + 2 < tt_vec.len() {
+            if let (TokenTree::Ident(prefix), TokenTree::Punct(punct), TokenTree::Ident(kw)) =
+                (&tt_vec[i], &tt_vec[i + 1], &tt_vec[i + 2])
+            {
+                //matched ~N
+                if punct.as_char() == '~' && kw == var_ident {
+                    eprintln!("matched identity:{}{}{}", prefix, punct, kw);
+
+                    let old = format!("{}{}{}", prefix, punct, kw);
+                    eprintln!("old string with identity:{}", old);
+                    let replaced = old.replace(&format!("~{}", kw), &format!("{}", val));
+                    eprintln!("new string with identity:{}", replaced);
+                    let rep_ident = proc_macro2::Ident::new(&replaced, prefix.span());
+                    output.extend(quote! {#rep_ident});
+                    i = i + 3;
+                    continue;
+                }
+            }
+        }
+
+        match &tt_vec[i] {
+            TokenTree::Group(g) => {
+                let gout = replace_ident_stream(&g.stream(), var_ident, val);
+                let mut newgroup = proc_macro2::Group::new(g.delimiter(), gout);
+                newgroup.set_span(g.span());
+                output.extend(quote! {#newgroup});
+            }
+            other => {
+                eprintln!("\tmatched non group:{}", other);
+                output.extend(quote! {#other});
+            }
+        }
+
+        i += 1;
+    }
+
+    eprintln!("replace_ident_stream, output:{}", output);
     output
 }
