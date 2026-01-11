@@ -8,9 +8,6 @@ publish = false
 [lib]
 proc-macro = true
 
-[build]
-rustflags = ["-A", "unused-imports"]
-
 [[test]]
 name = "tests"
 path = "tests/progress.rs"
@@ -21,5 +18,5 @@ trybuild = { version = "1.0.108", features = ["diff"] }
 [dependencies]
 proc-macro2 = "1.0.105"
 quote = "1.0.43"
-syn = {version = "2.0.114", features = ["full", "extra-traits"]}
+syn = {version = "2.0.114", features = ["full", "visit-mut", "extra-traits"]}
 # TODO
