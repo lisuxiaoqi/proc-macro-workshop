@@ -99,35 +99,60 @@ pub fn check(args: TokenStream, input: TokenStream) -> TokenStream {
 }
 
 fn check_match_seq(m: &syn::ExprMatch) -> Result<(), syn::Error> {
-    eprintln!("ExprMatch:{:?}", m);
+    //eprintln!("ExprMatch:{:?}", m);
     for (i, arm) in m.arms.iter().enumerate() {
         //limit arm pattern format
-        match arm.pat {
-            syn::Pat::TupleStruct(_) => (),
-            _ => return Err(syn::Error::new(arm.span(), "unsupported by #[sorted]")),
-        }
-
-        //check between prev arms
-        for prev in &m.arms[..i] {
-            if let syn::Pat::TupleStruct(syn::PatTupleStruct { path, .. }) = &arm.pat {
-                if let syn::Pat::TupleStruct(syn::PatTupleStruct {
-                    path: prev_path, ..
-                }) = &prev.pat
-                {
-                    if path.get_ident().unwrap().to_string().to_uppercase()
-                        < prev_path.get_ident().unwrap().to_string().to_uppercase()
+        match &arm.pat {
+            syn::Pat::TupleStruct(syn::PatTupleStruct { path, .. }) => {
+                for prev in &m.arms[..i] {
+                    if let syn::Pat::TupleStruct(syn::PatTupleStruct {
+                        path: prev_path, ..
+                    }) = &prev.pat
                     {
-                        return Err(syn::Error::new(
-                            path.span(),
-                            format!(
-                                "{} should sort before {}",
-                                path.get_ident().unwrap(),
-                                prev_path.get_ident().unwrap()
-                            ),
-                        ));
+                        let path_str = path
+                            .segments
+                            .iter()
+                            .map(|p| p.ident.to_string())
+                            .collect::<Vec<_>>()
+                            .join("::");
+                        let prev_str = prev_path
+                            .segments
+                            .iter()
+                            .map(|p| p.ident.to_string())
+                            .collect::<Vec<_>>()
+                            .join("::");
+                        eprintln!("path:{}, prev_path:{}", path_str, prev_str);
+                        if path_str.to_string().to_uppercase() < prev_str.to_string().to_uppercase()
+                        {
+                            return Err(syn::Error::new_spanned(
+                                &path,
+                                format!("{} should sort before {}", path_str, prev_str),
+                            ));
+                        }
                     }
                 }
             }
+            syn::Pat::Ident(syn::PatIdent { ident, .. }) => {
+                for prev in &m.arms[..i] {
+                    if let syn::Pat::Ident(syn::PatIdent {
+                        ident: prev_ident, ..
+                    }) = &prev.pat
+                    {
+                        let path_str = ident.to_string();
+                        let prev_str = prev_ident.to_string();
+                        eprintln!("path:{}, prev_path:{}", path_str, prev_str);
+                        if path_str.to_string().to_uppercase() < prev_str.to_string().to_uppercase()
+                        {
+                            return Err(syn::Error::new_spanned(
+                                &ident,
+                                format!("{} should sort before {}", path_str, prev_str),
+                            ));
+                        }
+                    }
+                }
+            }
+            syn::Pat::Wild(_) => (),
+            _ => return Err(syn::Error::new(arm.span(), "unsupported by #[sorted]")),
         }
     }
 
