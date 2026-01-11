@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
 use proc_macro2::Span;
-use quote::{quote, ToTokens};
+use quote::quote;
 use syn::spanned::Spanned;
 
 #[proc_macro_attribute]
@@ -19,34 +19,97 @@ pub fn bitfield(args: TokenStream, input: TokenStream) -> TokenStream {
 
     let bit_size = calsize(fields);
     let bytes = quote! {(#bit_size)/8};
+    let accs = gen_accs(name, fields);
+
     quote! {
         #[repr(C)]
         pub struct #name{
             data:[u8;#bytes],
         }
+
+        impl #name{
+            pub fn new()->Self{
+                Self{
+                    data:[0;#bytes],
+                }
+            }
+            #accs
+        }
     }
     .into()
 }
 
+fn gen_accs(_name: &syn::Ident, fields: &syn::FieldsNamed) -> proc_macro2::TokenStream {
+    let mut offset = quote! {0usize};
+    let mut output = quote! {};
+    for f in &fields.named {
+        if let Some(fid) = &f.ident {
+            let len = get_bits(f);
+            let setter_name = syn::Ident::new(&format!("set_{}", fid.to_string()), fid.span());
+            let getter_name = syn::Ident::new(&format!("get_{}", fid.to_string()), fid.span());
+
+            //get body
+            let get_body = quote! {
+                let mut result = 0usize;
+                for i in 0usize..#len{
+                    let byte_index = (#offset + i)/8;
+                    let byte_off = (#offset + i) %8;
+                    let bit = (self.data[byte_index] >> byte_off) & 1;
+                    result |= ((bit as usize) << i);
+                }
+                result
+            };
+
+            //set body
+            let set_body = quote! {
+                for i in 0usize..#len{
+                    let byte_index = (#offset + i)/8;
+                    let byte_off = (#offset +i)%8;
+                    let bit = (v>>i)&1;
+                    let mut data = self.data[byte_index];
+                    data &= !(1<<byte_off);
+                    data |= ((bit as u8) << byte_off);
+                    self.data[byte_index] = data;
+                }
+            };
+
+            output.extend(quote! {
+                pub fn #setter_name(&mut self, v:usize){
+                    #set_body
+                }
+                pub fn #getter_name(&self)->usize{
+                    #get_body
+                }
+            });
+
+            offset = quote! {#offset + #len};
+        }
+    }
+    output
+}
+
 fn calsize(fields: &syn::FieldsNamed) -> proc_macro2::TokenStream {
     fields.named.iter().fold(quote! {0usize}, |mut acc, f| {
-        let mut bits = quote! {};
-        if let syn::Type::Path(path_type) = &f.ty {
-            if let Some(t) = path_type.path.segments.last() {
-                let enum_name = &t.ident;
-                bits = quote! {
-                    +#enum_name::BITS
-                };
-            } else {
-                eprintln!(
-                    "TypePath segments has no last:{}",
-                    path_type.to_token_stream()
-                );
-            }
-        }
-        acc.extend(bits);
+        let bits = get_bits(f);
+        let bits_size = quote! {
+            +#bits
+        };
+        acc.extend(bits_size);
         acc
     })
+}
+
+fn get_bits(f: &syn::Field) -> proc_macro2::TokenStream {
+    if let syn::Type::Path(path_type) = &f.ty {
+        if let Some(t) = path_type.path.segments.last() {
+            let enum_name = &t.ident;
+            return quote! {
+                #enum_name::BITS
+            };
+        }
+    }
+
+    quote! {0usize}
 }
 
 #[proc_macro]
