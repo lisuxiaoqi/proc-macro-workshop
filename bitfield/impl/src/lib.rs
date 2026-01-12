@@ -22,6 +22,9 @@ pub fn bitfield(args: TokenStream, input: TokenStream) -> TokenStream {
     let accs = gen_accs(name, fields);
 
     quote! {
+        const TOTAL_BITS:usize = #bit_size;
+        const CHECK_MOD : usize = TOTAL_BITS % 8;
+
         #[repr(C)]
         pub struct #name{
             data:[u8;#bytes],
@@ -29,12 +32,14 @@ pub fn bitfield(args: TokenStream, input: TokenStream) -> TokenStream {
 
         impl #name{
             pub fn new()->Self{
+                let _ : bitfield::checks::CheckMultipleOfEight<MultipleOfEight<CHECK_MOD>>;
                 Self{
                     data:[0;#bytes],
                 }
             }
             #accs
         }
+
     }
     .into()
 }
