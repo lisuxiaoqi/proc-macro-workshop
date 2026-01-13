@@ -1,5 +1,6 @@
 use proc_macro::TokenStream;
 mod bitfield;
+mod gen_enum;
 mod gen_type;
 
 #[proc_macro_attribute]
@@ -10,4 +11,9 @@ pub fn bitfield(args: TokenStream, input: TokenStream) -> TokenStream {
 #[proc_macro]
 pub fn expand_types(input: TokenStream) -> TokenStream {
     gen_type::generate(input)
+}
+
+#[proc_macro_derive(BitfieldSpecifier)]
+pub fn enumfield(input: TokenStream) -> TokenStream {
+    gen_enum::generate(input)
 }

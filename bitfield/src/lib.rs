@@ -12,6 +12,7 @@
 // (macro, trait, struct) through the one bitfield crate.
 #[allow(unused)]
 pub use bitfield_impl::bitfield;
+pub use bitfield_impl::BitfieldSpecifier;
 
 pub mod checks;
 pub use checks::MultipleOfEight;

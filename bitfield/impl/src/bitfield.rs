@@ -56,18 +56,19 @@ fn gen_accs(_name: &syn::Ident, fields: &syn::FieldsNamed) -> proc_macro2::Token
 
             //get body
             let get_body = quote! {
-                let mut result = 0;
+                let mut result:<#ftype as bitfield::Specifier>::Base = 0;
                 for i in 0usize..#len{
                     let byte_index = (#offset + i)/8;
                     let byte_off = (#offset + i) %8;
                     let bit = (self.data[byte_index] >> byte_off) & 1;
                     result |= ((bit as <#ftype as bitfield::Specifier>::Base) << i);
                 }
-                result
+                <#ftype as bitfield::Specifier>::Face::fromt(result)
             };
 
             //set body
             let set_body = quote! {
+                let v:<#ftype as bitfield::Specifier>::Base = FromTrans::fromt(v);
                 for i in 0usize..#len{
                     let byte_index = (#offset + i)/8;
                     let byte_off = (#offset +i)%8;
@@ -80,10 +81,10 @@ fn gen_accs(_name: &syn::Ident, fields: &syn::FieldsNamed) -> proc_macro2::Token
             };
 
             output.extend(quote! {
-                pub fn #setter_name(&mut self, v:<#ftype as bitfield::Specifier>::Base){
+                pub fn #setter_name(&mut self, v:<#ftype as bitfield::Specifier>::Face){
                     #set_body
                 }
-                pub fn #getter_name(&self)-><#ftype as bitfield::Specifier>::Base{
+                pub fn #getter_name(&self)-><#ftype as bitfield::Specifier>::Face{
                     #get_body
                 }
             });
@@ -110,7 +111,7 @@ fn get_bits(f: &syn::Field) -> proc_macro2::TokenStream {
         if let Some(t) = path_type.path.segments.last() {
             let enum_name = &t.ident;
             return quote! {
-                #enum_name::BITS
+                <#enum_name as Specifier>::BITS
             };
         }
     }
