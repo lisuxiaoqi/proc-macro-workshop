@@ -13,13 +13,11 @@
 #[allow(unused)]
 pub use bitfield_impl::bitfield;
 
-pub trait Specifier {
-    const BITS: usize;
-}
-
 pub mod checks;
 pub use checks::MultipleOfEight;
 
-bitfield_impl::expand_types!();
+mod specifier;
+pub use specifier::*;
 
-// TODO other things
+//gen B1~B64
+bitfield_impl::expand_types!();
