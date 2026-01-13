@@ -52,15 +52,16 @@ fn gen_accs(_name: &syn::Ident, fields: &syn::FieldsNamed) -> proc_macro2::Token
             let len = get_bits(f);
             let setter_name = syn::Ident::new(&format!("set_{}", fid.to_string()), fid.span());
             let getter_name = syn::Ident::new(&format!("get_{}", fid.to_string()), fid.span());
+            let ftype = &f.ty;
 
             //get body
             let get_body = quote! {
-                let mut result = 0usize;
+                let mut result = 0;
                 for i in 0usize..#len{
                     let byte_index = (#offset + i)/8;
                     let byte_off = (#offset + i) %8;
                     let bit = (self.data[byte_index] >> byte_off) & 1;
-                    result |= ((bit as usize) << i);
+                    result |= ((bit as <#ftype as bitfield::Specifier>::Base) << i);
                 }
                 result
             };
@@ -79,10 +80,10 @@ fn gen_accs(_name: &syn::Ident, fields: &syn::FieldsNamed) -> proc_macro2::Token
             };
 
             output.extend(quote! {
-                pub fn #setter_name(&mut self, v:usize){
+                pub fn #setter_name(&mut self, v:<#ftype as bitfield::Specifier>::Base){
                     #set_body
                 }
-                pub fn #getter_name(&self)->usize{
+                pub fn #getter_name(&self)-><#ftype as bitfield::Specifier>::Base{
                     #get_body
                 }
             });
