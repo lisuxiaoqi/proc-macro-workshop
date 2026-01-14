@@ -1,5 +1,6 @@
 use crate::gen_type;
 use proc_macro::TokenStream;
+use proc_macro2::Span;
 use quote::quote;
 use syn::ItemEnum;
 
@@ -9,7 +10,11 @@ pub fn generate(input: TokenStream) -> TokenStream {
     let face: syn::Type = syn::parse_quote!(#name);
     //eprintln!("ItemEnum:{:?}", &input);
     //get bits, base
-    let bits = get_enum_bits(&input);
+    let bits;
+    match get_enum_bits(&input) {
+        Ok(v) => bits = v,
+        Err(e) => return e.to_compile_error().into(),
+    }
     let base = gen_type::get_base(bits);
     let specifier = gen_type::gen_specifier(&name, &base, &face, bits);
 
@@ -75,15 +80,20 @@ fn gen_trans(
     }
 }
 
-fn get_enum_bits(item: &syn::ItemEnum) -> usize {
-    let v1 = item.variants.last().unwrap();
-    if let Some((_, syn::Expr::Lit(lit))) = &v1.discriminant {
-        if let syn::Lit::Int(int_lit) = &lit.lit {
-            let token = int_lit.token().to_string();
-            let token = token.replace("0b", "");
-            return token.len();
-        }
+fn get_enum_bits(item: &syn::ItemEnum) -> Result<usize, syn::Error> {
+    let mut len = item.variants.len();
+    if len % 2 != 0 {
+        return Err(syn::Error::new(
+            Span::call_site(),
+            "BitfieldSpecifier expected a number of variants which is a power of 2",
+        ));
     }
 
-    panic!("Enum Field must be ExprLit")
+    let mut i = 0;
+    while len != 0 {
+        len = len >> 1;
+        i += 1;
+    }
+
+    Ok(i - 1)
 }
