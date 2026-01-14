@@ -18,6 +18,6 @@ There is no magic behind the macro. All the works is to parse tokens, generate t
 
 To be honest, a little boring..
 
-The key point is to understand the concept of TokenStream and TokenTree. It helps a lot during the proccess with the syn and quote crates, but the proc_macro2 is the real boss.
+The key point is to understand the concept of TokenStream and TokenTree. It helps a lot with the syn and quote crates, but the proc_macro2 is the real one.
 
-And keep in mind that macro only can handle tokens, it's impossible to understand the semantics in this peroid, so pls forget to get the real output from variables.
+And keep in mind macro can only handle tokens, it's impossible to understand the semantics, so pls forget to fetch the real output from variables.
