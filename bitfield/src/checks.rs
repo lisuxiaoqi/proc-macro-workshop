@@ -62,3 +62,8 @@ where
     <T as RenamedType>::CheckType: DiscriminantInRange,
 {
 }
+
+//bits Check
+pub struct BitsCheck<T> {
+    pub v: T,
+}

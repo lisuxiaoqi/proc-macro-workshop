@@ -1,5 +1,5 @@
 use proc_macro::TokenStream;
-use quote::quote;
+use quote::{quote, quote_spanned};
 use syn::spanned::Spanned;
 
 pub fn generate(args: TokenStream, input: TokenStream) -> TokenStream {
@@ -54,6 +54,8 @@ fn gen_accs(_name: &syn::Ident, fields: &syn::FieldsNamed) -> proc_macro2::Token
             let getter_name = syn::Ident::new(&format!("get_{}", fid.to_string()), fid.span());
             let ftype = &f.ty;
 
+            let bits_check = get_check(f, &len);
+
             //get body
             let get_body = quote! {
                 let mut result:<#ftype as bitfield::Specifier>::Base = 0;
@@ -85,6 +87,7 @@ fn gen_accs(_name: &syn::Ident, fields: &syn::FieldsNamed) -> proc_macro2::Token
                     #set_body
                 }
                 pub fn #getter_name(&self)-><#ftype as bitfield::Specifier>::Face{
+                    #bits_check
                     #get_body
                 }
             });
@@ -104,6 +107,29 @@ fn calsize(fields: &syn::FieldsNamed) -> proc_macro2::TokenStream {
         acc.extend(bits_size);
         acc
     })
+}
+
+fn get_check(f: &syn::Field, bits: &proc_macro2::TokenStream) -> proc_macro2::TokenStream {
+    let mut output = quote! {};
+    for attr in &f.attrs {
+        if attr.path().is_ident("bits") {
+            if let syn::Meta::NameValue(nv) = &attr.meta {
+                if let syn::Expr::Lit(syn::ExprLit { lit, .. }) = &nv.value {
+                    if let syn::Lit::Int(li) = lit {
+                        if let Ok(bit_meta) = li.base10_parse::<usize>() {
+                            let check = quote_spanned! {li.span()=>
+                                let _ = bitfield::checks::BitsCheck::<[(); #bit_meta]>{
+                                    v:[(); #bits]
+                                };
+                            };
+                            output.extend(quote! {#check });
+                        }
+                    }
+                }
+            }
+        }
+    }
+    output
 }
 
 fn get_bits(f: &syn::Field) -> proc_macro2::TokenStream {
