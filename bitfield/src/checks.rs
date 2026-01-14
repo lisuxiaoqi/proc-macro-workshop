@@ -38,3 +38,27 @@ pub struct CheckMultipleOfEight<T>(std::marker::PhantomData<T>)
 where
     T: RenamedType,
     <T as RenamedType>::CheckType: TotalSizeIsMultipleOfEightBits;
+
+/*
+ * Check For True/False
+ * */
+
+pub trait DiscriminantInRange {}
+pub struct True;
+pub struct False;
+impl DiscriminantInRange for True {}
+
+pub struct RangeWrapper<const F: bool>;
+impl RenamedType for RangeWrapper<true> {
+    type CheckType = True;
+}
+impl RenamedType for RangeWrapper<false> {
+    type CheckType = False;
+}
+
+pub trait CheckRange<T>
+where
+    T: RenamedType,
+    <T as RenamedType>::CheckType: DiscriminantInRange,
+{
+}

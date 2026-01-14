@@ -20,22 +20,34 @@ pub fn generate(input: TokenStream) -> TokenStream {
 
     let (facearm, basearm) = gen_trans_arms(&input);
     let transfer = gen_trans(&base, &face, &facearm, &basearm);
+    let check = gen_check(&input);
 
     //gen specifier
     quote! {
         #transfer
         #specifier
+        #check
     }
     .into()
 }
 
+fn gen_check(item: &syn::ItemEnum) -> proc_macro2::TokenStream {
+    let name = &item.ident;
+    let mut flag = quote! {};
+    for var in &item.variants {
+        let key = &var.ident;
+        flag.extend(quote! {#name::#key as usize == 0 ||});
+    }
+    flag.extend(quote! {false});
+    quote! {
+        impl bitfield::checks::CheckRange<bitfield::checks::RangeWrapper<{#flag}>> for #name{}
+    }
+}
 fn gen_trans_arms(item: &syn::ItemEnum) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
     let mut facearm = proc_macro2::TokenStream::new();
     let mut basearm = proc_macro2::TokenStream::new();
     let name = &item.ident;
     for var in &item.variants {
-        //let val_usize = intlit.base10_parse::<usize>().unwrap();
-        //let val = syn::LitInt::new(&val_usize.to_string(), intlit.span());
         let key = &var.ident;
         let lower_key: syn::Ident = syn::Ident::new(&key.to_string().to_lowercase(), key.span());
         let val = quote! {
