@@ -7,7 +7,7 @@ branch: train
 
 # Thanks
 
-Thanks dtolnay. Your great work help me go through the every details as an macro beginner.
+Thanks dtolnay. Your great work help me go through the every details as a macro beginner.
 * https://github.com/dtolnay/proc-macro-workshop
 
 Thanks Robbepop. It really kills me in bitfield tests 4. So lucky to get the ideas from your repo.
