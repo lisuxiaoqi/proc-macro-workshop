@@ -34,21 +34,21 @@ fn gen_trans_arms(item: &syn::ItemEnum) -> (proc_macro2::TokenStream, proc_macro
     let mut basearm = proc_macro2::TokenStream::new();
     let name = &item.ident;
     for var in &item.variants {
-        if let Some((_, syn::Expr::Lit(litexpr))) = &var.discriminant {
-            if let syn::Lit::Int(intlit) = &litexpr.lit {
-                let val_usize = intlit.base10_parse::<usize>().unwrap();
-                let val = syn::LitInt::new(&val_usize.to_string(), intlit.span());
-                let key = &var.ident;
+        //let val_usize = intlit.base10_parse::<usize>().unwrap();
+        //let val = syn::LitInt::new(&val_usize.to_string(), intlit.span());
+        let key = &var.ident;
+        let lower_key: syn::Ident = syn::Ident::new(&key.to_string().to_lowercase(), key.span());
+        let val = quote! {
+            #name::#key as <#name as Specifier>::Base
+        };
 
-                facearm.extend(quote! {
-                    #name::#key => #val,
-                });
+        facearm.extend(quote! {
+            #name::#key => #val,
+        });
 
-                basearm.extend(quote! {
-                    #val => #name::#key,
-                });
-            }
-        }
+        basearm.extend(quote! {
+            #lower_key if #lower_key == #val => #name::#key,
+        });
     }
     (facearm, basearm)
 }

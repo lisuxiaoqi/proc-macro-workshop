@@ -14,3 +14,4 @@ trybuild = { version = "1.0.108", features = ["diff"] }
 
 [dependencies]
 bitfield-impl = { path = "impl" }
+heck = "0.5.0"
